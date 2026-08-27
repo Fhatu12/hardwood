@@ -35,6 +35,7 @@ import dev.hardwood.internal.reader.FileMetadataCache.PreparedFile;
 import dev.hardwood.internal.schema.ProjectedSchema;
 import dev.hardwood.internal.thrift.OffsetIndexReader;
 import dev.hardwood.internal.thrift.ThriftCompactReader;
+import dev.hardwood.jfr.PageFilterEvent;
 import dev.hardwood.jfr.RowGroupFilterEvent;
 import dev.hardwood.metadata.ColumnChunk;
 import dev.hardwood.metadata.FieldPath;
@@ -612,6 +613,13 @@ public class RowGroupIterator {
                 List<NeededPage> neededPages = computeNeededPages(
                         allPages, matchingRows, rowGroup.numRows());
 
+                // Report the page-level filter's effect before `truncateToMaxRows`,
+                // so a `head(N)` cap is not counted as pages the predicate skipped,
+                // and before the empty-plan shortcut below, so the fully-pruned
+                // column — the most effective case — is reported too.
+                emitPageFilterEvent(inputFile.name(), workItem.rowGroupIndex(), columnSchema.name(),
+                        matchingRows, allPages.size(), neededPages.size());
+
                 if (neededPages.isEmpty()) {
                     plans[projCol] = FetchPlan.EMPTY;
                     continue;
@@ -871,6 +879,30 @@ public class RowGroupIterator {
             }
         }
         return needed;
+    }
+
+    /// Emits a [PageFilterEvent] for one column chunk whose pages were narrowed by
+    /// Column Index push-down.
+    ///
+    /// Nothing is emitted when `matchingRows` is [RowRanges#ALL] — no page-level
+    /// filter ran for this row group, either because the read carries no predicate
+    /// or because [#masksApplicableForRowGroup] closed the gate and promoted the
+    /// ranges back to ALL. The absence of the event is therefore the signal that
+    /// no page was a candidate for skipping, and a `pagesSkipped` of 0 means the
+    /// filter ran and kept everything.
+    private static void emitPageFilterEvent(String fileName, int rowGroupIndex, String column,
+                                            RowRanges matchingRows, int totalPages, int pagesKept) {
+        if (matchingRows.isAll()) {
+            return;
+        }
+        PageFilterEvent event = new PageFilterEvent();
+        event.file = fileName;
+        event.rowGroupIndex = rowGroupIndex;
+        event.column = column;
+        event.totalPages = totalPages;
+        event.pagesKept = pagesKept;
+        event.pagesSkipped = totalPages - pagesKept;
+        event.commit();
     }
 
     /// Whether per-page row masks may be applied by the projected plans of

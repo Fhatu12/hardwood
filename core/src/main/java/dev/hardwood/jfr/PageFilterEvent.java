@@ -15,6 +15,12 @@ import jdk.jfr.Name;
 import jdk.jfr.StackTrace;
 
 /// JFR event emitted when pages are filtered by Column Index predicate push-down.
+///
+/// One event per column chunk whose pages the push-down considered, so a row group
+/// read with a filter over two projected columns emits two events. `pagesSkipped`
+/// of 0 means every page survived the predicate; no event at all means no page-level
+/// filter ran for that column chunk, either because the read carries no predicate or
+/// because the column chunk has no Column Index to evaluate.
 @Name("dev.hardwood.PageFilter")
 @Label("Page Filter")
 @Category({"Hardwood", "Filter"})
