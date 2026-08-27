@@ -50,13 +50,10 @@ your loop is processing the current batch (or row), pool threads are already dec
 decoding the pages that feed the next batches, queuing the results. The consumer thread
 generally pulls ready-to-use decoded data instead of blocking on decode.
 
-Two [JFR events](../reference/configuration.md#jfr-java-flight-recorder-events) make the pipeline visible
-when you profile:
-
-- **`BatchWait`** — the consumer blocked waiting for the pipeline. Frequent or long waits mean
-  decode (or I/O) isn't keeping up with consumption.
-- **`PrefetchMiss`** — a needed page wasn't prefetched in time and had to be decoded
-  synchronously on the consumer's path.
+One [JFR event](../reference/configuration.md#jfr-java-flight-recorder-events) makes the pipeline visible
+when you profile: **`BatchWait`**, recorded on the consumer thread each time it blocks waiting
+for the pipeline, for as long as the block lasts. Frequent or long waits mean decode (or I/O)
+isn't keeping up with consumption.
 
 ## Cross-file prefetching
 
