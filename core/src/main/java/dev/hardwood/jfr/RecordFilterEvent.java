@@ -15,12 +15,23 @@ import jdk.jfr.Name;
 import jdk.jfr.StackTrace;
 
 /// JFR event emitted when records are filtered by record-level predicate evaluation.
+///
+/// One event per file a read touched, committed when the read moves on to the next
+/// file and when it closes. Record-level filtering is what remains after row-group
+/// statistics and the Column Index have narrowed the read, so `totalRecords` counts
+/// the records the predicate actually decided on, not the rows in the file: rows in
+/// pruned row groups and pages never reach it, and a read that stops early — `head(N)`,
+/// or a caller that abandons the reader — counts only as far as it got.
 @Name("dev.hardwood.RecordFilter")
 @Label("Record Filter")
 @Category({"Hardwood", "Filter"})
 @Description("Records filtered by record-level predicate evaluation")
 @StackTrace(false)
 public class RecordFilterEvent extends Event {
+
+    @Label("File")
+    @Description("Name of the Parquet file whose records were filtered")
+    public String file;
 
     @Label("Total Records")
     @Description("Total number of records evaluated against the predicate")
